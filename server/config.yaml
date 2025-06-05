@@ -1,0 +1,7 @@
+server:
+  port: 50051
+  # if using SSL, set to true and provide the paths to the key and cert files
+  ssl: false
+  ssl_key: "certs/server.key"
+  ssl_cert: "certs/server.pem"
+  log_level: "DEBUG" # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"

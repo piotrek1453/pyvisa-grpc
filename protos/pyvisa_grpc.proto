@@ -1,0 +1,48 @@
+syntax = "proto3";
+package pyvisa_grpc;
+
+service PyVISAService {
+  // Open a resource
+  rpc OpenResource(OpenResourceRequest) returns (OpenResourceResponse);
+
+  // Close a resource
+  rpc CloseResource(CloseResourceRequest) returns (CloseResourceResponse);
+
+  // Read from a resource
+  rpc Read(ReadRequest) returns (ReadResponse);
+
+  // Write to a resource
+  rpc Write(WriteRequest) returns (WriteResponse);
+}
+message OpenResourceRequest {
+  string resource_name = 1; // The name of the resource to open
+}
+message OpenResourceResponse {
+  string session = 1; // The session identifier for the opened resource
+}
+message CloseResourceRequest {
+  string session = 1; // The session identifier for the resource to close
+}
+message CloseResourceResponse {
+  bool success = 1; // Indicates if the resource was successfully closed
+}
+message ReadRequest {
+  string session = 1; // The session identifier for the resource to read from
+}
+message ReadResponse {
+  string data = 1; // The data read from the resource
+}
+message WriteRequest {
+  string session = 1; // The session identifier for the resource to write to
+  string data = 2;    // The data to write to the resource
+}
+message WriteResponse {
+  bool success = 1; // Indicates if the write operation was successful
+}
+message ErrorResponse {
+  string error_message = 1; // Error message in case of failure
+}
+message StatusResponse {
+  bool success = 1;   // Indicates if the operation was successful
+  string message = 2; // Additional message or status information
+}
