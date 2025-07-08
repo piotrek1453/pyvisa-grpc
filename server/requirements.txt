@@ -6,13 +6,7 @@ pyvisa-py
 pyyaml
 psutil
 zeroconf
-
-# Optional dependencies for specific features
-# Uncomment the following lines if needed
-# pyserial
-# pyusb
-# pygpib
-
-# Development dependencies
-# Uncomment the following lines if needed
-# grpcio-tools
+pyserial
+pyusb
+pygpib
+grpcio-tools

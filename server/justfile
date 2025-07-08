@@ -1,0 +1,23 @@
+set shell := ["bash", "-cu"]
+
+# Zmienna z portem wczytanym z YAML-a
+port := `python3 -c "import yaml; print(yaml.safe_load(open('config.yaml'))['server']['port'])"`
+
+# Domyślny przepis
+default:
+    just run
+
+run:
+  just grpc-generate
+  ./setup_and_run.sh
+
+grpcui:
+    grpcui -plaintext localhost:{{port}}
+
+grpc-generate:
+    source ./venv/bin/activate && \
+    python3 -m grpc_tools.protoc \
+        -I../protos \
+        --python_out=. \
+        --grpc_python_out=. \
+        ../protos/pyvisa_grpc.proto

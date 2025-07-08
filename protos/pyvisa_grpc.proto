@@ -2,47 +2,51 @@ syntax = "proto3";
 package pyvisa_grpc;
 
 service PyVISAService {
-  // Open a resource
-  rpc OpenResource(OpenResourceRequest) returns (OpenResourceResponse);
+  // Connect to a resource
+  rpc Connect(ConnectRequest) returns (StatusResponse);
 
-  // Close a resource
-  rpc CloseResource(CloseResourceRequest) returns (CloseResourceResponse);
+  // Disconnect from a resource
+  rpc Disconnect(DisconnectRequest) returns (StatusResponse);
 
   // Read from a resource
-  rpc Read(ReadRequest) returns (ReadResponse);
+  rpc Read(ResourceRequest) returns (ReadResponse);
 
   // Write to a resource
-  rpc Write(WriteRequest) returns (WriteResponse);
+  rpc Write(WriteRequest) returns (StatusResponse);
+
+  // Query a resource (write then read)
+  rpc Query(QueryRequest) returns (ReadResponse);
 }
-message OpenResourceRequest {
-  string resource_name = 1; // The name of the resource to open
+
+message ConnectRequest {
+  string resource_name =
+      1; // VISA resource string (e.g., "TCPIP0::192.168.1.1::INSTR")
 }
-message OpenResourceResponse {
-  string session = 1; // The session identifier for the opened resource
+
+message DisconnectRequest {
+  string resource_name = 1; // VISA resource string to disconnect
 }
-message CloseResourceRequest {
-  string session = 1; // The session identifier for the resource to close
+
+message ResourceRequest {
+  string resource_name = 1; // VISA resource string to interact with
 }
-message CloseResourceResponse {
-  bool success = 1; // Indicates if the resource was successfully closed
-}
-message ReadRequest {
-  string session = 1; // The session identifier for the resource to read from
-}
-message ReadResponse {
-  string data = 1; // The data read from the resource
-}
+
 message WriteRequest {
-  string session = 1; // The session identifier for the resource to write to
-  string data = 2;    // The data to write to the resource
+  string resource_name = 1; // VISA resource string to write to
+  string data = 2;          // Data to write
 }
-message WriteResponse {
-  bool success = 1; // Indicates if the write operation was successful
+
+message QueryRequest {
+  string resource_name = 1; // VISA resource string to query
+  string command = 2;       // Command to send before reading
 }
-message ErrorResponse {
-  string error_message = 1; // Error message in case of failure
+
+message ReadResponse {
+  string data = 1;           // Data read from the resource
+  StatusResponse status = 2; // Operation status
 }
+
 message StatusResponse {
-  bool success = 1;   // Indicates if the operation was successful
-  string message = 2; // Additional message or status information
+  bool success = 1;   // Operation success status
+  string message = 2; // Additional status information
 }

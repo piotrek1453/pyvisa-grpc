@@ -7,3 +7,7 @@ __pycache__/
 *.key
 *.pem
 *.pkl
+*pb2.py
+*pb2_grpc.py
+*pb2.pyi
+*pb2_grpc.pyi

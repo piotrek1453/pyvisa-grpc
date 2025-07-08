@@ -11,6 +11,7 @@ from grpc_reflection.v1alpha import reflection
 import pyvisa
 import pyvisa_grpc_pb2
 import pyvisa_grpc_pb2_grpc
+import uuid
 
 
 # ANSI color codes
@@ -83,163 +84,160 @@ class PyVISAService(pyvisa_grpc_pb2_grpc.PyVISAServiceServicer):
     def __init__(self):
         super().__init__()
         self.rm = None
-        self.resources = {}  # Dictionary to store opened resources
+        self.resources = {}  # {resource_name: resource_object}
         self._init_resource_manager()
 
     def _init_resource_manager(self):
-        """Initialize the VISA Resource Manager with detailed logging"""
+        """Initialize the VISA Resource Manager"""
         try:
             logger.debug("Initializing VISA Resource Manager")
             self.rm = pyvisa.ResourceManager("@py")
-            resources = self.rm.list_resources()
-            logger.debug(
-                f"Available VISA resources:\n{cformat(resources, Colors.LIGHT_BLUE)}"
-            )
             logger.info(
-                f"{Colors.GREEN}VISA Resource Manager initialized successfully{Colors.RESET}"
+                f"{Colors.GREEN}VISA Resource Manager initialized{Colors.RESET}"
             )
         except Exception as e:
             logger.error(
-                f"{Colors.RED}Failed to initialize VISA Resource Manager:\n{cformat(str(e), Colors.LIGHT_RED)}{Colors.RESET}"
+                f"{Colors.RED}Failed to initialize VISA Resource Manager: {e}{Colors.RESET}"
             )
             raise
 
-    def OpenResource(self, request, context):
-        logger.info(
-            f"{Colors.CYAN}OpenResource request for: {request.resource_name}{Colors.RESET}"
-        )
+    def Connect(self, request, context):
+        """Connect to a VISA resource"""
         try:
-            logger.debug(
-                f"Attempting to open resource:\n{cformat(request.resource_name, Colors.LIGHT_MAGENTA)}"
-            )
-            resource = self.rm.open_resource(request.resource_name)
-
-            # Store the resource in our dictionary
-            session_id = str(resource.session)
-            self.resources[session_id] = resource
-
-            logger.info(
-                f"{Colors.GREEN}Successfully opened session: {session_id}{Colors.RESET}"
-            )
-            logger.debug(
-                f"Resource details:\n{cformat({
-                    'Timeout': resource.timeout,
-                    'Chunk size': resource.chunk_size,
-                    'Interface type': resource.interface_type
-                }, Colors.LIGHT_BLUE)}"
-            )
-
-            return pyvisa_grpc_pb2.OpenResourceResponse(session=session_id)
-        except pyvisa.VisaIOError as e:
-            error_msg = f"{Colors.RED}VISA Error opening resource:\n{cformat(e.description, Colors.LIGHT_RED)}{Colors.RESET}"
-            logger.error(error_msg)
-            logger.debug(f"Full VISA error details:\n{cformat(e, Colors.RED)}")
-            context.set_details(error_msg)
-            context.set_code(grpc.StatusCode.NOT_FOUND)
-            return pyvisa_grpc_pb2.OpenResourceResponse()
-
-    def CloseResource(self, request, context):
-        logger.info(
-            f"{Colors.CYAN}CloseResource request for session: {request.session}{Colors.RESET}"
-        )
-        try:
-            logger.debug(
-                f"Attempting to close session:\n{cformat(request.session, Colors.LIGHT_MAGENTA)}"
-            )
-            if request.session in self.resources:
-                resource = self.resources[request.session]
-                resource.close()
-                del self.resources[request.session]
-                logger.info(
-                    f"{Colors.GREEN}Successfully closed session: {request.session}{Colors.RESET}"
+            if request.resource_name in self.resources:
+                return pyvisa_grpc_pb2.StatusResponse(
+                    success=True,
+                    message=f"Already connected to {request.resource_name}",
                 )
-                return pyvisa_grpc_pb2.CloseResourceResponse(success=True)
-            else:
-                error_msg = f"{Colors.RED}Session not found: {request.session}{Colors.RESET}"
-                logger.error(error_msg)
-                context.set_details(error_msg)
-                context.set_code(grpc.StatusCode.NOT_FOUND)
-                return pyvisa_grpc_pb2.CloseResourceResponse(success=False)
-        except pyvisa.VisaIOError as e:
-            error_msg = f"{Colors.RED}VISA Error closing resource:\n{cformat(e.description, Colors.LIGHT_RED)}{Colors.RESET}"
-            logger.error(error_msg)
-            context.set_details(error_msg)
-            context.set_code(grpc.StatusCode.NOT_FOUND)
-            return pyvisa_grpc_pb2.CloseResourceResponse(success=False)
+
+            resource = self.rm.open_resource(request.resource_name)
+            self.resources[request.resource_name] = resource
+            logger.info(
+                f"{Colors.GREEN}Connected to {request.resource_name}{Colors.RESET}"
+            )
+
+            return pyvisa_grpc_pb2.StatusResponse(
+                success=True, message=f"Connected to {request.resource_name}"
+            )
         except Exception as e:
-            error_msg = f"{Colors.RED}Unexpected error closing resource:\n{cformat(str(e), Colors.LIGHT_RED)}{Colors.RESET}"
-            logger.error(error_msg)
-            context.set_details(error_msg)
-            context.set_code(grpc.StatusCode.INTERNAL)
-            return pyvisa_grpc_pb2.CloseResourceResponse(success=False)
+            error_msg = (
+                f"Failed to connect to {request.resource_name}: {str(e)}"
+            )
+            logger.error(f"{Colors.RED}{error_msg}{Colors.RESET}")
+            return pyvisa_grpc_pb2.StatusResponse(
+                success=False, message=error_msg
+            )
+
+    def Disconnect(self, request, context):
+        """Disconnect from a VISA resource"""
+        try:
+            if request.resource_name not in self.resources:
+                return pyvisa_grpc_pb2.StatusResponse(
+                    success=True,
+                    message=f"Not connected to {request.resource_name}",
+                )
+
+            resource = self.resources.pop(request.resource_name)
+            resource.close()
+            logger.info(
+                f"{Colors.GREEN}Disconnected from {request.resource_name}{Colors.RESET}"
+            )
+
+            return pyvisa_grpc_pb2.StatusResponse(
+                success=True,
+                message=f"Disconnected from {request.resource_name}",
+            )
+        except Exception as e:
+            error_msg = (
+                f"Error disconnecting from {request.resource_name}: {str(e)}"
+            )
+            logger.error(f"{Colors.RED}{error_msg}{Colors.RESET}")
+            return pyvisa_grpc_pb2.StatusResponse(
+                success=False, message=error_msg
+            )
 
     def Read(self, request, context):
-        logger.info(
-            f"{Colors.CYAN}Read request for session: {request.session}{Colors.RESET}"
-        )
+        """Read from a VISA resource"""
         try:
-            logger.debug(
-                f"Attempting to read from session:\n{cformat(request.session, Colors.LIGHT_MAGENTA)}"
-            )
-            if request.session in self.resources:
-                resource = self.resources[request.session]
-                data = resource.read_raw()  # Read all available data
-                logger.debug(
-                    f"Successfully read data:\n{cformat(data, Colors.LIGHT_GREEN)}"
+            if request.resource_name not in self.resources:
+                error_msg = f"Not connected to {request.resource_name}"
+                logger.error(f"{Colors.RED}{error_msg}{Colors.RESET}")
+                return pyvisa_grpc_pb2.ReadResponse(
+                    status=pyvisa_grpc_pb2.StatusResponse(
+                        success=False, message=error_msg
+                    )
                 )
-                return pyvisa_grpc_pb2.ReadResponse(data=data)
-            else:
-                error_msg = f"{Colors.RED}Session not found: {request.session}{Colors.RESET}"
-                logger.error(error_msg)
-                context.set_details(error_msg)
-                context.set_code(grpc.StatusCode.NOT_FOUND)
-                return pyvisa_grpc_pb2.ReadResponse()
-        except pyvisa.VisaIOError as e:
-            error_msg = f"{Colors.RED}VISA Error reading resource:\n{cformat(e.description, Colors.LIGHT_RED)}{Colors.RESET}"
-            logger.error(error_msg)
-            context.set_details(error_msg)
-            context.set_code(grpc.StatusCode.NOT_FOUND)
-            return pyvisa_grpc_pb2.ReadResponse()
+
+            resource = self.resources[request.resource_name]
+            data = resource.read()
+            logger.debug(f"Read from {request.resource_name}: {data}")
+
+            return pyvisa_grpc_pb2.ReadResponse(
+                data=data, status=pyvisa_grpc_pb2.StatusResponse(success=True)
+            )
         except Exception as e:
-            error_msg = f"{Colors.RED}Unexpected error reading resource:\n{cformat(str(e), Colors.LIGHT_RED)}{Colors.RESET}"
-            logger.error(error_msg)
-            context.set_details(error_msg)
-            context.set_code(grpc.StatusCode.INTERNAL)
-            return pyvisa_grpc_pb2.ReadResponse()
+            error_msg = f"Error reading from {request.resource_name}: {str(e)}"
+            logger.error(f"{Colors.RED}{error_msg}{Colors.RESET}")
+            return pyvisa_grpc_pb2.ReadResponse(
+                status=pyvisa_grpc_pb2.StatusResponse(
+                    success=False, message=error_msg
+                )
+            )
 
     def Write(self, request, context):
-        logger.info(
-            f"{Colors.CYAN}Write request for session: {request.session}, data: {request.data}{Colors.RESET}"
-        )
+        """Write to a VISA resource"""
         try:
-            logger.debug(
-                f"Attempting to write to session:\n{cformat(request.session, Colors.LIGHT_MAGENTA)}"
-            )
-            if request.session in self.resources:
-                resource = self.resources[request.session]
-                resource.write(request.data)  # Write string data directly
-                logger.debug(
-                    f"{Colors.GREEN}Successfully wrote data to session: {request.session}{Colors.RESET}"
+            if request.resource_name not in self.resources:
+                error_msg = f"Not connected to {request.resource_name}"
+                logger.error(f"{Colors.RED}{error_msg}{Colors.RESET}")
+                return pyvisa_grpc_pb2.StatusResponse(
+                    success=False, message=error_msg
                 )
-                return pyvisa_grpc_pb2.WriteResponse(success=True)
-            else:
-                error_msg = f"{Colors.RED}Session not found: {request.session}{Colors.RESET}"
-                logger.error(error_msg)
-                context.set_details(error_msg)
-                context.set_code(grpc.StatusCode.NOT_FOUND)
-                return pyvisa_grpc_pb2.WriteResponse(success=False)
-        except pyvisa.VisaIOError as e:
-            error_msg = f"{Colors.RED}VISA Error writing to resource:\n{cformat(e.description, Colors.LIGHT_RED)}{Colors.RESET}"
-            logger.error(error_msg)
-            context.set_details(error_msg)
-            context.set_code(grpc.StatusCode.NOT_FOUND)
-            return pyvisa_grpc_pb2.WriteResponse(success=False)
+
+            resource = self.resources[request.resource_name]
+            resource.write(request.data)
+            logger.debug(f"Wrote to {request.resource_name}: {request.data}")
+
+            return pyvisa_grpc_pb2.StatusResponse(
+                success=True,
+                message=f"Data written to {request.resource_name}",
+            )
         except Exception as e:
-            error_msg = f"{Colors.RED}Unexpected error writing to resource:\n{cformat(str(e), Colors.LIGHT_RED)}{Colors.RESET}"
-            logger.error(error_msg)
-            context.set_details(error_msg)
-            context.set_code(grpc.StatusCode.INTERNAL)
-            return pyvisa_grpc_pb2.WriteResponse(success=False)
+            error_msg = f"Error writing to {request.resource_name}: {str(e)}"
+            logger.error(f"{Colors.RED}{error_msg}{Colors.RESET}")
+            return pyvisa_grpc_pb2.StatusResponse(
+                success=False, message=error_msg
+            )
+
+    def Query(self, request, context):
+        """Query a VISA resource (write then read)"""
+        try:
+            if request.resource_name not in self.resources:
+                error_msg = f"Not connected to {request.resource_name}"
+                logger.error(f"{Colors.RED}{error_msg}{Colors.RESET}")
+                return pyvisa_grpc_pb2.ReadResponse(
+                    status=pyvisa_grpc_pb2.StatusResponse(
+                        success=False, message=error_msg
+                    )
+                )
+
+            resource = self.resources[request.resource_name]
+            data = resource.query(request.command)
+            logger.debug(
+                f"Query {request.resource_name}: {request.command} -> {data}"
+            )
+
+            return pyvisa_grpc_pb2.ReadResponse(
+                data=data, status=pyvisa_grpc_pb2.StatusResponse(success=True)
+            )
+        except Exception as e:
+            error_msg = f"Error querying {request.resource_name}: {str(e)}"
+            logger.error(f"{Colors.RED}{error_msg}{Colors.RESET}")
+            return pyvisa_grpc_pb2.ReadResponse(
+                status=pyvisa_grpc_pb2.StatusResponse(
+                    success=False, message=error_msg
+                )
+            )
 
 
 def load_config(config_path="config.yaml"):
@@ -250,7 +248,7 @@ def load_config(config_path="config.yaml"):
             "ssl": False,
             "ssl_key": "certs/server.key",
             "ssl_cert": "certs/server.pem",
-            "log_level": "DEBUG",  # Default to DEBUG for maximum logging
+            "log_level": "DEBUG",
         }
     }
 
