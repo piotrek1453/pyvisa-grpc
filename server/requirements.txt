@@ -4,11 +4,11 @@ protobuf
 pyvisa
 pyvisa-py
 pyyaml
+psutil
+zeroconf
 
 # Optional dependencies for specific features
 # Uncomment the following lines if needed
-# psutil
-# zeroconf
 # pyserial
 # pyusb
 # pygpib
