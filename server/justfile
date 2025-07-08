@@ -1,23 +1,30 @@
 set shell := ["bash", "-cu"]
 
-# Zmienna z portem wczytanym z YAML-a
 port := `python3 -c "import yaml; print(yaml.safe_load(open('config.yaml'))['server']['port'])"`
 
-# Domyślny przepis
 default:
     just run
 
+# setup venv if needed and run the server
 run:
-  just grpc-generate
-  ./setup_and_run.sh
+    just grpc-generate
+    ./setup_and_run.sh
 
+# connect grpcui to server for testing
 grpcui:
     grpcui -plaintext localhost:{{port}}
 
+# update stubs
 grpc-generate:
     source ./venv/bin/activate && \
     python3 -m grpc_tools.protoc \
         -I../protos \
         --python_out=. \
         --grpc_python_out=. \
-        ../protos/pyvisa_grpc.proto
+        ../protos/pyvisa_grpc.proto && \
+    deactivate
+
+# generate ssl certs for encrypted gRPC comms
+ssl-generate:
+    mkdir certs && \
+    openssl req -x509 -newkey rsa:4096 -keyout certs/server.key -out certs/server.pem -days 365 -nodes -subj "/CN=localhost"

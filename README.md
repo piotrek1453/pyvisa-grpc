@@ -9,16 +9,23 @@ VISA using your favourite programming language as long as it supports gRPC.
 Server parses config from server/config.yaml. By default it runs without
 encryption on port 50051.
 
-For easy setup of self-signed SSL certs run this command in root of the repo:
+Most tasks needed for development and usage are handled by justfile located in
+server/ directory (need to cd into it to run the script).
+
+For running the server you can run
 
 ```
-openssl req -x509 -newkey rsa:4096 -keyout server/certs/server.key -out server/certs/server.pem -days 365 -nodes -subj "/CN=localhost"
+just run
+```
+
+For easy setup of self-signed SSL
+
+```
+just ssl-generate
 ```
 
 and change ssl parameter value to true in server/config.yaml.
 
 # TODO
 
-- Add Query() method (read+write in one),
-- rethink the way of handling sessions: as of now there's one resource manager
-  created for every instrument connected.
+- Add method to list available resources.
