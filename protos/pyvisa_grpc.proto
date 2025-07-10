@@ -2,6 +2,10 @@ syntax = "proto3";
 package pyvisa_grpc;
 
 service PyVISAService {
+  // List available instruments
+  rpc ListResources(ListResourcesRequest)
+      returns (stream ListResourcesResponse);
+
   // Connect to a resource
   rpc Connect(ConnectRequest) returns (StatusResponse);
 
@@ -16,6 +20,13 @@ service PyVISAService {
 
   // Query a resource (write then read)
   rpc Query(QueryRequest) returns (ReadResponse);
+}
+
+message ListResourcesRequest {}
+
+message ListResourcesResponse {
+    string resource_name = 1;
+    StatusResponse status = 2;
 }
 
 message ConnectRequest {

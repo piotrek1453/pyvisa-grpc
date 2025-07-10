@@ -11,7 +11,6 @@ from grpc_reflection.v1alpha import reflection
 import pyvisa
 import pyvisa_grpc_pb2
 import pyvisa_grpc_pb2_grpc
-import uuid
 
 
 # ANSI color codes
@@ -84,7 +83,8 @@ class PyVISAService(pyvisa_grpc_pb2_grpc.PyVISAServiceServicer):
     def __init__(self):
         super().__init__()
         self.rm = None
-        self.resources = {}  # {resource_name: resource_object}
+        self.open_resources = {}  # {resource_name: resource_object}
+        self.available_resources = []
         self._init_resource_manager()
 
     def _init_resource_manager(self):
@@ -95,23 +95,49 @@ class PyVISAService(pyvisa_grpc_pb2_grpc.PyVISAServiceServicer):
             logger.info(
                 f"{Colors.GREEN}VISA Resource Manager initialized{Colors.RESET}"
             )
+            self.available_resources = self.rm.list_resources()
+            logger.info(
+                f"{Colors.GREEN}Detected VISA resources: {self.available_resources}{Colors.RESET}"
+            )
         except Exception as e:
             logger.error(
                 f"{Colors.RED}Failed to initialize VISA Resource Manager: {e}{Colors.RESET}"
             )
             raise
 
+    def ListResources(self, request, context):
+        """List available instruments"""
+        try:
+            self.available_resources = self.rm.list_resources()
+            logger.info(
+                f"{Colors.GREEN}Available resources:\n{self.available_resources}{Colors.RESET}"
+            )
+            for res in self.available_resources:
+                yield pyvisa_grpc_pb2.ListResourcesResponse(
+                    resource_name=res,
+                    status=pyvisa_grpc_pb2.StatusResponse(
+                        success=True, message=""
+                    ),
+                )
+        except Exception as e:
+            yield pyvisa_grpc_pb2.ListResourcesResponse(
+                resource_name="",
+                status=pyvisa_grpc_pb2.StatusResponse(
+                    success=False, message=f"Exception:\n{e}"
+                ),
+            )
+
     def Connect(self, request, context):
         """Connect to a VISA resource"""
         try:
-            if request.resource_name in self.resources:
+            if request.resource_name in self.open_resources:
                 return pyvisa_grpc_pb2.StatusResponse(
                     success=True,
                     message=f"Already connected to {request.resource_name}",
                 )
 
             resource = self.rm.open_resource(request.resource_name)
-            self.resources[request.resource_name] = resource
+            self.open_resources[request.resource_name] = resource
             logger.info(
                 f"{Colors.GREEN}Connected to {request.resource_name}{Colors.RESET}"
             )
@@ -131,13 +157,13 @@ class PyVISAService(pyvisa_grpc_pb2_grpc.PyVISAServiceServicer):
     def Disconnect(self, request, context):
         """Disconnect from a VISA resource"""
         try:
-            if request.resource_name not in self.resources:
+            if request.resource_name not in self.open_resources:
                 return pyvisa_grpc_pb2.StatusResponse(
                     success=True,
                     message=f"Not connected to {request.resource_name}",
                 )
 
-            resource = self.resources.pop(request.resource_name)
+            resource = self.open_resources.pop(request.resource_name)
             resource.close()
             logger.info(
                 f"{Colors.GREEN}Disconnected from {request.resource_name}{Colors.RESET}"
@@ -159,7 +185,7 @@ class PyVISAService(pyvisa_grpc_pb2_grpc.PyVISAServiceServicer):
     def Read(self, request, context):
         """Read from a VISA resource"""
         try:
-            if request.resource_name not in self.resources:
+            if request.resource_name not in self.open_resources:
                 error_msg = f"Not connected to {request.resource_name}"
                 logger.error(f"{Colors.RED}{error_msg}{Colors.RESET}")
                 return pyvisa_grpc_pb2.ReadResponse(
@@ -168,7 +194,7 @@ class PyVISAService(pyvisa_grpc_pb2_grpc.PyVISAServiceServicer):
                     )
                 )
 
-            resource = self.resources[request.resource_name]
+            resource = self.open_resources[request.resource_name]
             data = resource.read()
             logger.debug(f"Read from {request.resource_name}: {data}")
 
@@ -187,14 +213,14 @@ class PyVISAService(pyvisa_grpc_pb2_grpc.PyVISAServiceServicer):
     def Write(self, request, context):
         """Write to a VISA resource"""
         try:
-            if request.resource_name not in self.resources:
+            if request.resource_name not in self.open_resources:
                 error_msg = f"Not connected to {request.resource_name}"
                 logger.error(f"{Colors.RED}{error_msg}{Colors.RESET}")
                 return pyvisa_grpc_pb2.StatusResponse(
                     success=False, message=error_msg
                 )
 
-            resource = self.resources[request.resource_name]
+            resource = self.open_resources[request.resource_name]
             resource.write(request.data)
             logger.debug(f"Wrote to {request.resource_name}: {request.data}")
 
@@ -212,7 +238,7 @@ class PyVISAService(pyvisa_grpc_pb2_grpc.PyVISAServiceServicer):
     def Query(self, request, context):
         """Query a VISA resource (write then read)"""
         try:
-            if request.resource_name not in self.resources:
+            if request.resource_name not in self.open_resources:
                 error_msg = f"Not connected to {request.resource_name}"
                 logger.error(f"{Colors.RED}{error_msg}{Colors.RESET}")
                 return pyvisa_grpc_pb2.ReadResponse(
@@ -221,7 +247,7 @@ class PyVISAService(pyvisa_grpc_pb2_grpc.PyVISAServiceServicer):
                     )
                 )
 
-            resource = self.resources[request.resource_name]
+            resource = self.open_resources[request.resource_name]
             data = resource.query(request.command)
             logger.debug(
                 f"Query {request.resource_name}: {request.command} -> {data}"
