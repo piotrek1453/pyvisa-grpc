@@ -82,13 +82,7 @@ def cformat(obj, color=Colors.LIGHT_WHITE):
 class PyVISAService(pyvisa_grpc_pb2_grpc.PyVISAServiceServicer):
     def __init__(self):
         super().__init__()
-        self.rm = None
         self.open_resources = {}  # {resource_name: resource_object}
-        self.available_resources = []
-        self._init_resource_manager()
-
-    def _init_resource_manager(self):
-        """Initialize the VISA Resource Manager"""
         try:
             logger.debug("Initializing VISA Resource Manager")
             self.rm = pyvisa.ResourceManager("@py")
@@ -97,7 +91,7 @@ class PyVISAService(pyvisa_grpc_pb2_grpc.PyVISAServiceServicer):
             )
             self.available_resources = self.rm.list_resources()
             logger.info(
-                f"{Colors.GREEN}Detected VISA resources: {self.available_resources}{Colors.RESET}"
+                f"{Colors.GREEN}Detected VISA resources:\n{cformat(self.available_resources, Colors.GREEN)}{Colors.RESET}"
             )
         except Exception as e:
             logger.error(
@@ -109,9 +103,7 @@ class PyVISAService(pyvisa_grpc_pb2_grpc.PyVISAServiceServicer):
         """List available instruments"""
         try:
             self.available_resources = self.rm.list_resources()
-            logger.info(
-                f"{Colors.GREEN}Available resources:\n{self.available_resources}{Colors.RESET}"
-            )
+            logger.info(f"{Colors.GREEN}Available resources:\n{Colors.RESET}")
             for res in self.available_resources:
                 yield pyvisa_grpc_pb2.ListResourcesResponse(
                     resource_name=res,
