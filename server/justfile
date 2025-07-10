@@ -5,10 +5,12 @@ port := `python3 -c "import yaml; print(yaml.safe_load(open('config.yaml'))['ser
 default:
     just run
 
-# setup venv if needed and run the server
+# run the server
 run:
+    ./setup_venv.sh
     just grpc-generate
-    ./setup_and_run.sh
+    source ./venv/bin/activate && \
+    python3 pyvisa_grpc_server.py
 
 # connect grpcui to server for testing
 grpcui:
@@ -21,8 +23,7 @@ grpc-generate:
         -I../protos \
         --python_out=. \
         --grpc_python_out=. \
-        ../protos/pyvisa_grpc.proto && \
-    deactivate
+        ../protos/pyvisa_grpc.proto
 
 # generate ssl certs for encrypted gRPC comms
 ssl-generate:
